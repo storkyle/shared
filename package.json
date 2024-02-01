@@ -4,12 +4,11 @@
   "main": "index.js",
   "author": "Storky Le <storkyle.com@gmail.com>",
   "license": "MIT",
-  "description": "",
   "scripts": {
     "clean": "rimraf dist/",
     "build": "yarn clean && yarn compile",
     "compile": "tsc --project tsconfig.json && tsc-alias -p tsconfig.json",
-    "pub": "cp package.json LICENSE dist && cd dist && npm publish"
+    "pub": "cp package.json LICENSE dist && cd dist && npm publish --access public"
   },
   "dependencies": {
     "dayjs": "^1.11.10",
@@ -28,5 +27,14 @@
   },
   "engines": {
     "node": ">=18.12.1"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/storkyle/shared.git"
+  },
+  "bugs": {
+    "url": "https://github.com/storkyle/shared/issues"
+  },
+  "homepage": "https://github.com/storkyle/shared#readme",
+  "description": ""
 }
