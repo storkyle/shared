@@ -1,6 +1,6 @@
-import { EErrorCode } from '../enum';
+import { EErrorCode } from '@enum';
 
-export class CustomError extends Error {
+class CustomError extends Error {
   public code: EErrorCode;
 
   constructor(code: EErrorCode, message: string) {
@@ -9,3 +9,5 @@ export class CustomError extends Error {
     this.code = code;
   }
 }
+
+export { CustomError };

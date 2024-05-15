@@ -1,7 +1,7 @@
 import { Column, CreateDateColumn, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
-// internal modules
-import { ERecordStatus } from '../enum';
+// *INFO: internal modules
+import { ERecordStatus } from '@enum';
 
 export class BaseEntityWithoutId<StatusType = ERecordStatus> {
   // required fields

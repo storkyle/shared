@@ -1,15 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { DeepPartial, FindOneOptions, FindOptionsWhere, ObjectLiteral } from 'typeorm';
 
-// *INFO: Internal modules
-import { ERecordStatus } from '../enum';
-import { ActorType, IListOptions, IListWithPagingOptions, IPagingResult } from '../interfaces';
+// *INFO: internal modules
+import { ERecordStatus } from '@enum';
+import { ActorType, IListOptions, IListWithPagingOptions, IPagingResult } from '@interfaces';
 import { BaseRepo } from './base_repo';
 
 export class BaseService<TypeOfEntity extends ObjectLiteral> {
   protected _repo: BaseRepo<TypeOfEntity>;
   constructor(props: { repository: BaseRepo<TypeOfEntity> }) {
     this._repo = props.repository;
+  }
+
+  get repository() {
+    return this._repo;
   }
 
   async createSingle(

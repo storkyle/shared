@@ -1,6 +1,6 @@
-import { EErrorCode } from '../enum';
-import { CustomError } from '../error';
-import { formatURL } from '../utilities';
+import { EErrorCode } from '@enum';
+import { CustomError } from '@error';
+import { formatURL } from '@utilities';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export class ExternalService {
@@ -49,8 +49,11 @@ export class ExternalService {
     return true;
   }
 
-  public async emitEvent(eventName: string, target: string): Promise<boolean> {
-    const { status } = await this.fetchData<boolean>('/hook/event', { eventName, target });
+  public async emitEvent<T = any>(eventName: string, target: T): Promise<boolean> {
+    const { status } = await this.fetchData<boolean>('/hook/event', {
+      event_name: eventName,
+      target,
+    });
     return status;
   }
 }

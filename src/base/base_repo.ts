@@ -1,7 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { Logger } from 'pino';
 import {
+  DataSource,
   DeepPartial,
   EntityManager,
+  EntityTarget,
   FindManyOptions,
   FindOneOptions,
   FindOptionsWhere,
@@ -10,60 +13,53 @@ import {
   Repository,
 } from 'typeorm';
 
-// *INFO: Internal modules
-import { DEFAULT_ORDER, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../constants';
-import { ERecordStatus } from '../enum';
+// *INFO: internal modules
+import { DEFAULT_ORDER, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, SYSTEM_ACTOR } from '@constants';
+import { ERecordStatus } from '@enum';
 import {
   ActorType,
   IListOptions,
   IListWithPagingOptions,
   IPagingResult,
   TOrderTuple,
-} from '../interfaces';
-import { formatDate, trimData } from '../utilities';
+} from '@interfaces';
+import { formatDate, trimData } from '@utilities';
 
 type TSaveMode = 'create' | 'edit';
 
-const SYSTEM_ACTOR_KEY = 'system';
-
 const getActorId = (actor: ActorType): string | number | undefined => {
-  if (actor === SYSTEM_ACTOR_KEY) {
+  if (actor === SYSTEM_ACTOR) {
     return undefined;
   }
 
   return actor;
 };
-interface IRepoOptions {
-  defaultOrder: TOrderTuple[];
-  defaultPageSize: number;
-  defaultMaxPageSize: number;
-}
 
-interface IProps<EntityType extends ObjectLiteral> {
-  repository: Repository<EntityType>;
-  allow_field_search?: string[];
-  options?: Partial<IRepoOptions>;
-}
+const getValidPageSize = (pageSize: number = DEFAULT_PAGE_SIZE): number => {
+  const positivePageSize = pageSize > 0 ? pageSize : DEFAULT_PAGE_SIZE;
+  return Math.min(positivePageSize, MAX_PAGE_SIZE);
+};
 
 /**
  * @description Abstract class for repository, which contains common methods for all repositories
+ *
  */
 export class BaseRepo<EntityType extends ObjectLiteral> {
-  protected options: IRepoOptions;
   protected repository: Repository<EntityType>;
-  protected allow_field_search: string[] = [];
+  protected _allow_field_search: string[];
+  private entity: EntityTarget<EntityType>;
+  private logger: Logger<never> | Console;
 
-  constructor({ repository, options, allow_field_search }: IProps<EntityType>) {
-    this.repository = repository;
-    this.allow_field_search = allow_field_search ?? [];
-    this.options = Object.assign(
-      {
-        defaultOrder: DEFAULT_ORDER,
-        defaultPageSize: DEFAULT_PAGE_SIZE,
-        defaultMaxPageSize: MAX_PAGE_SIZE,
-      },
-      options
-    );
+  constructor(props: {
+    dataSource: DataSource;
+    entity: EntityTarget<EntityType>;
+    allowSearchFields: string[];
+    logger?: Logger<never> | Console;
+  }) {
+    this.repository = props.dataSource.getRepository(props.entity);
+    this._allow_field_search = props.allowSearchFields ?? [];
+    this.entity = props.entity;
+    this.logger = props.logger ?? console;
   }
 
   public getRepo(): Repository<EntityType> {
@@ -110,10 +106,10 @@ export class BaseRepo<EntityType extends ObjectLiteral> {
     options = {},
     search_value,
     page = 0,
-    page_size = this.options.defaultPageSize!,
-    orders = this.options.defaultOrder,
+    page_size = DEFAULT_PAGE_SIZE,
+    orders = DEFAULT_ORDER,
   }: IListWithPagingOptions<EntityType>): Promise<IPagingResult<EntityType>> {
-    const currentPageSize = Math.min(page_size, this.options.defaultMaxPageSize!);
+    const currentPageSize = getValidPageSize(page_size);
 
     const conditions: any = {
       skip: page * currentPageSize,
@@ -135,7 +131,7 @@ export class BaseRepo<EntityType extends ObjectLiteral> {
   public async list({
     options = {},
     search_value,
-    orders = this.options.defaultOrder,
+    orders = DEFAULT_ORDER,
   }: IListOptions<EntityType>): Promise<EntityType[]> {
     const conditions: any = this.generateConditionGetList({
       searchValue: search_value,
@@ -159,7 +155,7 @@ export class BaseRepo<EntityType extends ObjectLiteral> {
     return orderConditions;
   };
 
-  private generateConditionGetList({
+  public generateConditionGetList({
     searchValue,
     options,
     orders,
@@ -167,17 +163,17 @@ export class BaseRepo<EntityType extends ObjectLiteral> {
     searchValue?: string;
     options: FindManyOptions<EntityType>;
     orders?: TOrderTuple[];
-  }) {
+  }): FindOneOptions<EntityType> {
     const conditionsSearch: any[] = [];
     const conditions: any = {
-      order: this._generateOrderConditions(orders ?? this.options.defaultOrder!),
+      order: this._generateOrderConditions(orders ?? DEFAULT_ORDER),
       ...options,
     };
     const currentWhere = !Array.isArray(options.where) ? [options.where] : options.where ?? [];
     const currentWhereWithSearch: any[] = [];
 
     if (searchValue) {
-      this.allow_field_search.forEach((field) => {
+      this._allow_field_search.forEach((field) => {
         conditionsSearch.push({ [field]: ILike(`%${searchValue}%`) });
       });
 
@@ -186,6 +182,7 @@ export class BaseRepo<EntityType extends ObjectLiteral> {
           currentWhereWithSearch.push({ ...el, ...s });
         });
       });
+
       conditions.where = this.generateTrueWhereConditions(currentWhereWithSearch);
     } else {
       conditions.where = this.generateTrueWhereConditions(currentWhere as any[]);
@@ -194,10 +191,11 @@ export class BaseRepo<EntityType extends ObjectLiteral> {
     return conditions;
   }
 
-  private async _save(
+  private async _customSave(
     entityPayload: EntityType | EntityType[],
     actor: ActorType,
-    saveMode: TSaveMode
+    saveMode: TSaveMode,
+    manager?: EntityManager
   ): Promise<EntityType | EntityType[] | null> {
     const actorId = getActorId(actor);
     let formattedPayload: any;
@@ -218,7 +216,28 @@ export class BaseRepo<EntityType extends ObjectLiteral> {
       formattedPayload = formatWithRelationship(entityPayload);
     }
 
+    if (manager) {
+      return manager.save(formattedPayload);
+    }
+
     return this.repository.save(formattedPayload);
+  }
+
+  private async _save(
+    entityPayload: EntityType | EntityType[],
+    actor: ActorType,
+    saveMode: TSaveMode
+  ): Promise<EntityType | EntityType[] | null> {
+    return this._customSave(entityPayload, actor, saveMode);
+  }
+
+  private async _saveWithTransaction(
+    entityPayload: EntityType | EntityType[],
+    actor: ActorType,
+    saveMode: TSaveMode,
+    entityManager: EntityManager
+  ): Promise<EntityType | EntityType[] | null> {
+    return this._customSave(entityPayload, actor, saveMode, entityManager);
   }
 
   public async create(
@@ -233,25 +252,15 @@ export class BaseRepo<EntityType extends ObjectLiteral> {
     actor: ActorType,
     entityManager: EntityManager
   ): Promise<EntityType | EntityType[] | null> {
-    const actorId = getActorId(actor);
-    let formattedPayload: any;
+    return this._saveWithTransaction(entityPayload, actor, 'create', entityManager);
+  }
 
-    const formatWithRelationship = (payload: EntityType) => {
-      return Object.assign(payload, {
-        ...this.formatPayload(payload as any),
-        creator: actorId,
-      });
-    };
-
-    if (entityPayload instanceof Array) {
-      formattedPayload = entityPayload.map((el) => {
-        return formatWithRelationship(el);
-      });
-    } else {
-      formattedPayload = formatWithRelationship(entityPayload);
-    }
-
-    return entityManager.save(formattedPayload);
+  public async editWithTransaction(
+    entityPayload: EntityType | EntityType[],
+    actor: ActorType,
+    entityManager: EntityManager
+  ): Promise<EntityType | EntityType[] | null> {
+    return this._saveWithTransaction(entityPayload, actor, 'edit', entityManager);
   }
 
   public async edit(
@@ -261,15 +270,63 @@ export class BaseRepo<EntityType extends ObjectLiteral> {
     return this._save(entityPayload, actor, 'edit');
   }
 
+  private async _customSetStatus<T = ERecordStatus>(
+    criteria: string | string[] | number | number[] | FindOptionsWhere<EntityType>,
+    status: T,
+    actor: ActorType,
+    manager?: EntityManager
+  ) {
+    const formattedPayload = this.formatPayload({ status, updater: getActorId(actor) } as any);
+
+    let response;
+    if (manager) {
+      response = await manager.update(this.entity, criteria, formattedPayload);
+    } else {
+      response = await this.repository.update(criteria, formattedPayload);
+    }
+
+    const { affected = 0 } = response;
+
+    return affected > 0;
+  }
+
   public async setStatus<T = ERecordStatus>(
     criteria: string | string[] | number | number[] | FindOptionsWhere<EntityType>,
     status: T,
     actor: ActorType
   ): Promise<boolean> {
-    const { affected = 0 } = await this.repository.update(
-      criteria,
-      this.formatPayload({ status, updater: getActorId(actor) } as any)
-    );
+    return this._customSetStatus(criteria, status, actor);
+  }
+
+  public async setStatusWithTransaction<T = ERecordStatus>(
+    criteria: string | string[] | number | number[] | FindOptionsWhere<EntityType>,
+    status: T,
+    actor: ActorType,
+    manager: EntityManager
+  ): Promise<boolean> {
+    return this._customSetStatus(criteria, status, actor, manager);
+  }
+
+  private async _customRemove(
+    criteria: string | string[] | number | number[] | FindOptionsWhere<EntityType>,
+    actor: ActorType,
+    manager?: EntityManager
+  ): Promise<boolean> {
+    const formattedPayload = this.formatPayload({
+      removed: true,
+      removed_at: formatDate(new Date()),
+      remover: getActorId(actor),
+    } as any);
+
+    let response;
+
+    if (manager) {
+      response = await manager.update(this.entity, criteria, formattedPayload);
+    } else {
+      response = await this.repository.update(criteria, formattedPayload);
+    }
+
+    const { affected = 0 } = response;
 
     return affected > 0;
   }
@@ -278,21 +335,25 @@ export class BaseRepo<EntityType extends ObjectLiteral> {
     criteria: string | string[] | number | number[] | FindOptionsWhere<EntityType>,
     actor: ActorType
   ): Promise<boolean> {
-    const { affected = 0 } = await this.repository.update(
-      criteria,
-      this.formatPayload({
-        removed: true,
-        removed_at: formatDate(new Date()),
-        remover: getActorId(actor),
-      } as any)
-    );
+    return this._customRemove(criteria, actor);
+  }
 
-    return affected > 0;
+  public async removeWithTransaction(
+    criteria: string | string[] | number | number[] | FindOptionsWhere<EntityType>,
+    actor: ActorType,
+    manager: EntityManager
+  ): Promise<boolean> {
+    return this._customRemove(criteria, actor, manager);
   }
 
   public async destroy(id: string | number): Promise<boolean> {
-    const r = await this.repository.delete(id);
-    return !!r.affected;
+    try {
+      const r = await this.repository.delete(id);
+      return !!r.affected;
+    } catch (error) {
+      this.logger.error('destroyRecord', { error, payload: { id } });
+      return false;
+    }
   }
 
   public buildEntity(deepPartial: DeepPartial<EntityType>): EntityType;

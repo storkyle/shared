@@ -1,6 +1,6 @@
 {
   "name": "@storkyle/shared",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "main": "index.js",
   "author": "Storky Le <storkyle.com@gmail.com>",
   "license": "MIT",
@@ -14,6 +14,7 @@
     "dayjs": "^1.11.10",
     "graphql": "^16.8.1",
     "i18n": "^0.15.1",
+    "pino": "^9.1.0",
     "typeorm": "^0.3.19"
   },
   "devDependencies": {
