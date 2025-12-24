@@ -27,6 +27,9 @@ jobs:
         run: yarn build
 
       - name: Publish to NPM
-        run: yarn pub
+        run: |
+          cp package.json LICENSE dist/
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > dist/.npmrc
+          cd dist && npm publish --access public --registry https://registry.npmjs.org/
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
