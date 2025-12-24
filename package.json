@@ -1,6 +1,6 @@
 {
   "name": "@storkyle/shared",
-  "version": "0.1.3",
+  "version": "1.0.1",
   "main": "index.js",
   "author": "Storky Le <storkyle.com@gmail.com>",
   "license": "MIT",
