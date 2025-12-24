@@ -8,5 +8,5 @@ export interface IContextGraphql {
   sid?: string;
   uid?: string;
   lang?: string;
-  timezone?: string;
+  timezone?: string; // timezone of the request user
 }
