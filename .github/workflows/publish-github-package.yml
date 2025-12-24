@@ -93,9 +93,13 @@ jobs:
 
       - name: Publish to GitHub Package
         if: steps.semantic-release.outputs.should_release == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cp package.json LICENSE dist/
           cd dist
+          echo "@storkyle:registry=https://npm.pkg.github.com" >> .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> .npmrc
           npm publish --access public
 
       - name: Update package.json version
