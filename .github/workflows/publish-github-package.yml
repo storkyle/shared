@@ -91,6 +91,12 @@ jobs:
             echo "New version will be: $NEW_VERSION"
           fi
 
+      - name: Update package.json version
+        if: steps.semantic-release.outputs.should_release == 'true'
+        run: |
+          NEW_VERSION="${{ steps.semantic-release.outputs.new_version }}"
+          node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json')); pkg.version = '$NEW_VERSION'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
+
       - name: Publish to GitHub Package
         if: steps.semantic-release.outputs.should_release == 'true'
         env:
@@ -101,12 +107,6 @@ jobs:
           echo "@storkyle:registry=https://npm.pkg.github.com" >> .npmrc
           echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> .npmrc
           npm publish --access public
-
-      - name: Update package.json version
-        if: steps.semantic-release.outputs.should_release == 'true'
-        run: |
-          NEW_VERSION="${{ steps.semantic-release.outputs.new_version }}"
-          node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json')); pkg.version = '$NEW_VERSION'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
 
   tag:
     needs: release
